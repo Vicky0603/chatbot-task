@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Promtior RAG Chatbot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+    <div class="app">
+        <header class="app-header">
+    <div class="app-title">
+        <span class="dot"></span>
+        <h1>Promtior Assistant</h1>
+    </div>
+        <p class="app-subtitle">
+        RAG chatbot over Promtior information.
+        </p>
+    </header>
+    <main class="chat-container">
+        <div id="messages" class="messages">
+        <!-- Messages are injected via JS -->
+        </div>
+    </main>
+
+    <footer class="input-area">
+        <form id="chat-form" autocomplete="off">
+        <input
+            id="message-input"
+            type="text"
+            placeholder="Type your question about Promtior..."
+        />
+        <button type="submit">Send</button>
+        </form>
+        <div id="error-message" class="error-message"></div>
+    </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

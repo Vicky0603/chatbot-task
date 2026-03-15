@@ -83,6 +83,8 @@ Quick example using `Invoke-RestMethod`:
 Invoke-RestMethod -Method Post -Uri "http://localhost:8000/promtior-rag/invoke" -ContentType "application/json" -Body '{"input":"What does Promtior do?"}'
 ```
 
+
+
 ## Docker (optional)
 
 Recommended `Dockerfile` is included. Common steps:
@@ -104,3 +106,6 @@ Bash/WSL:
 ```bash
 docker run --rm -p 8000:8000 --env-file ./environments/local.env -v "$(pwd)/data:/app/data" promtior-rag:latest
 ```
+
+
+

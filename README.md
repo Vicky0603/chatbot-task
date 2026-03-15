@@ -74,6 +74,16 @@ Follow these steps to run locally (PowerShell examples for Windows included):
   - Frontend: http://127.0.0.1:8000/
   - LangServe Playground: http://127.0.0.1:8000/promtior-rag/playground/
   - Programmatic endpoint: POST `http://127.0.0.1:8000/promtior-rag/invoke` (JSON `{ "input": "your question" }`).
+  - Health check: GET `http://127.0.0.1:8000/healthz`
+
+## Production hardening (optional)
+- Enable rate limiting:
+  - Set `RATE_LIMIT_ENABLED=true` and `RATE_LIMIT_PER_MINUTE=60` (or as needed).
+- Protect with Basic Auth:
+  - Set `PROTECT_WITH_BASIC_AUTH=true`, `PROTECT_USERNAME=admin`, `PROTECT_PASSWORD=secret`.
+  - Applies to all routes except `/healthz` and static files.
+- Correlation IDs:
+  - Every request/response includes `X-Request-ID`. Errors include `request_id` in the JSON payload.
 
 ## Test the API from PowerShell
 

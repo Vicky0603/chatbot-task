@@ -58,6 +58,30 @@ function setTyping(isTyping) {
     messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
+function renderErrorFromPayload(payload, requestId, where = "") {
+  const parts = [];
+  const err = payload && payload.error ? payload.error : null;
+  if (err) {
+    parts.push(`${err.type || 'error'} (${err.status || 'n/a'}): ${err.message || 'Unknown error'}`);
+    if (err.detail) {
+      if (Array.isArray(err.detail)) {
+        parts.push(err.detail.map(d => (d.msg || JSON.stringify(d))).join("; "));
+      } else if (typeof err.detail === 'string') {
+        parts.push(err.detail);
+      } else {
+        parts.push(JSON.stringify(err.detail));
+      }
+    }
+    if (err.request_id || requestId) {
+      parts.push(`request_id=${err.request_id || requestId}`);
+    }
+  } else {
+    parts.push("Unexpected error format");
+  }
+  const msg = where ? `${where}: ${parts.join(" | ")}` : parts.join(" | ");
+  errorEl.textContent = msg;
+}
+
 async function sendMessage(text) {
     if (!text.trim()) return;
     if (isSending) return;
@@ -81,7 +105,16 @@ async function sendMessage(text) {
             body: JSON.stringify({ input: text }),
             signal,
         });
-        if (!res.ok || !res.body) throw new Error(`Stream error: ${res.status}`);
+        if (!res.ok || !res.body) {
+            // Try to extract structured error
+            let payload = null;
+            let rid = res.headers.get('X-Request-ID') || undefined;
+            try { payload = await res.json(); } catch(_) {}
+            if (payload) {
+              renderErrorFromPayload(payload, rid, 'stream');
+            }
+            throw new Error(`Stream error: ${res.status}`);
+        }
 
         // Prepare assistant bubble to update progressively
         setTyping(false);
@@ -122,8 +155,15 @@ async function sendMessage(text) {
             body: JSON.stringify({ input: text }),
         });
         if (!finalRes.ok) {
-            const txt = await finalRes.text().catch(() => null);
-            throw new Error(`Invoke error: ${finalRes.status} ${txt ?? ''}`);
+            let rid = finalRes.headers.get('X-Request-ID') || undefined;
+            try {
+              const payload = await finalRes.json();
+              renderErrorFromPayload(payload, rid, 'invoke');
+            } catch(_) {
+              const txt = await finalRes.text().catch(() => null);
+              errorEl.textContent = `Invoke error: ${finalRes.status} ${txt ?? ''}`;
+            }
+            throw new Error(`Invoke error: ${finalRes.status}`);
         }
         const finalData = await finalRes.json();
         const payload = finalData?.output ?? finalData;

@@ -51,5 +51,11 @@ class Settings(BaseModel):
     log_level: str = os.getenv("APP_LOG_LEVEL", "info")
     # Runtime flag: indicates whether OpenAI is usable (true by default)
     openai_usable: bool = True
+    # Rate limit & auth
+    rate_limit_enabled: bool = os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true"
+    rate_limit_per_minute: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+    basic_auth_enabled: bool = os.getenv("PROTECT_WITH_BASIC_AUTH", "false").lower() == "true"
+    basic_auth_user: str | None = os.getenv("PROTECT_USERNAME")
+    basic_auth_pass: str | None = os.getenv("PROTECT_PASSWORD")
 
 settings = Settings()

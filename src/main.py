@@ -9,6 +9,7 @@ from langserve import add_routes
 from src.chains.rag_chain import rag_chain
 from src.config import settings
 from src.api.errors import register_error_handlers
+from src.api.middleware import RequestIDMiddleware, RateLimitMiddleware, BasicAuthMiddleware
 from src.logging_config import setup_logging
 
 setup_logging(settings.log_level)
@@ -24,6 +25,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Correlation IDs
+app.add_middleware(RequestIDMiddleware)
+
+# Optional protection for production
+if settings.basic_auth_enabled and settings.basic_auth_user and settings.basic_auth_pass:
+    app.add_middleware(BasicAuthMiddleware, username=settings.basic_auth_user, password=settings.basic_auth_pass)
+
+if settings.rate_limit_enabled:
+    app.add_middleware(RateLimitMiddleware, limit_per_minute=settings.rate_limit_per_minute)
 
 # simple request logging
 @app.middleware("http")

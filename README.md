@@ -83,6 +83,8 @@ Quick example using `Invoke-RestMethod`:
 Invoke-RestMethod -Method Post -Uri "http://localhost:8000/promtior-rag/invoke" -ContentType "application/json" -Body '{"input":"What does Promtior do?"}'
 ```
 
+
+
 ## Docker (optional)
 
 Recommended `Dockerfile` is included. Common steps:

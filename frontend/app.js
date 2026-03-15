@@ -72,53 +72,81 @@ async function sendMessage(text) {
     setTyping(true);
 
     try {
-        const response = await fetch("/promtior-rag/invoke", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ input: text }),
+        // Try streaming partial tokens first
+        const controller = new AbortController();
+        const signal = controller.signal;
+        const res = await fetch("/promtior-rag/stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input: text }),
+            signal,
         });
+        if (!res.ok || !res.body) throw new Error(`Stream error: ${res.status}`);
 
-        if (!response.ok) {
-        const txt = await response.text().catch(()=>null);
-        throw new Error(`Server error: ${response.status} ${txt ?? ''}`);
-        }
-
-        const data = await response.json();
-
-        // Normalize different response shapes
-        let payload = data;
-        if (data && typeof data === "object" && "output" in data) {
-        payload = data.output;
-        }
-
-        let answerText = "";
-
-        if (!payload) {
-        answerText = "Empty response from server.";
-        } else if (typeof payload === "string") {
-        answerText = payload;
-        } else if (payload.ok === false) {
-        // fallback shape: { ok:false, message, context }
-        answerText = (payload.message ? payload.message + "\n\n" : "") + (payload.context || JSON.stringify(payload));
-        } else if (payload.answer) {
-        answerText = payload.answer;
-        } else if (payload.content) {
-        if (Array.isArray(payload.content)) {
-            answerText = payload.content.map(c => (typeof c === "string" ? c : c?.text ?? "")).join("\n");
-        } else if (typeof payload.content === "string") {
-            answerText = payload.content;
-        } else {
-            answerText = JSON.stringify(payload.content);
-        }
-        } else {
-        // last resort: pretty-print whole payload
-        answerText = JSON.stringify(payload, null, 2);
-        }
-
+        // Prepare assistant bubble to update progressively
         setTyping(false);
-        appendMessage("bot", answerText);
+        appendMessage("bot", "");
+        const assistantRow = messagesEl.lastChild;
+        const bubble = assistantRow.querySelector(".message-bubble");
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            // SSE-style: split by newlines and parse 'data: ' lines when possible
+            const parts = buffer.split(/\n\n/);
+            buffer = parts.pop() || "";
+            for (const chunk of parts) {
+                const line = chunk.split("\n").find(l => l.startsWith("data:"));
+                if (!line) continue;
+                const json = line.replace(/^data:\s*/, "");
+                try {
+                    const evt = JSON.parse(json);
+                    const token = typeof evt === "string" ? evt : (evt?.data ?? evt?.token ?? evt?.content ?? "");
+                    if (token) bubble.textContent += token;
+                } catch (_) {
+                    // Fallback: append raw text
+                    bubble.textContent += json;
+                }
+            }
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        // After stream ends, fetch final structured answer (to get citations)
+        const finalRes = await fetch("/promtior-rag/invoke", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input: text }),
+        });
+        if (!finalRes.ok) {
+            const txt = await finalRes.text().catch(() => null);
+            throw new Error(`Invoke error: ${finalRes.status} ${txt ?? ''}`);
+        }
+        const finalData = await finalRes.json();
+        const payload = finalData?.output ?? finalData;
+        if (payload && payload.answer) {
+            bubble.textContent = payload.answer;
+            // Render citations if available
+            if (Array.isArray(payload.sources) && payload.sources.length) {
+                const cites = document.createElement("div");
+                cites.style.marginTop = "6px";
+                cites.style.fontSize = "0.8rem";
+                cites.style.opacity = "0.85";
+                cites.innerHTML = "Sources:";
+                const ul = document.createElement("ul");
+                for (const s of payload.sources.slice(0, 3)) {
+                    const li = document.createElement("li");
+                    li.textContent = `${s.source}`;
+                    ul.appendChild(li);
+                }
+                cites.appendChild(ul);
+                bubble.appendChild(document.createElement("br"));
+                bubble.appendChild(cites);
+            }
+        }
     } catch (err) {
         console.error(err);
         setTyping(false);

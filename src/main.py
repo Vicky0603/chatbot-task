@@ -1,12 +1,18 @@
+import logging
+import os
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from langserve import add_routes
-import os
 
 from src.chains.rag_chain import rag_chain
 from src.config import settings
+from src.api.errors import register_error_handlers
+from src.logging_config import setup_logging
+
+setup_logging(settings.log_level)
+logger = logging.getLogger("app")
 
 app = FastAPI(title="Promtior RAG Chatbot")
 
@@ -22,13 +28,16 @@ app.add_middleware(
 # simple request logging
 @app.middleware("http")
 async def log_requests(request, call_next):
-    print(f"Incoming request: {request.method} {request.url}")
+    logger.info("%s %s", request.method, request.url.path)
     resp = await call_next(request)
-    print(f"Response status: {resp.status_code} for {request.method} {request.url}")
+    logger.info("%s %s -> %s", request.method, request.url.path, resp.status_code)
     return resp
 
 # LangServe
 add_routes(app, rag_chain, path="/promtior-rag")
+
+# Centralized error handlers
+register_error_handlers(app)
 
 # Frontend
 if os.path.isdir(settings.frontend_dir):
@@ -39,3 +48,22 @@ def index():
     idx = os.path.join(settings.frontend_dir, "index.html")
     # asegurar content-type correcto
     return FileResponse(idx, media_type="text/html")
+
+
+@app.get("/healthz")
+def healthz():
+    vector_dir = settings.vectorstore_dir
+    vs_exists = os.path.isdir(vector_dir) and any(True for _ in os.scandir(vector_dir))
+    status = {
+        "status": "ok",
+        "openai": {
+            "configured": bool(settings.openai_api_key),
+            "model": settings.model_name,
+        },
+        "vectorstore": {
+            "path": vector_dir,
+            "exists": vs_exists,
+        },
+        "playground": "/promtior-rag/playground/",
+    }
+    return JSONResponse(status_code=200, content=status)

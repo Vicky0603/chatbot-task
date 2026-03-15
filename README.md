@@ -104,3 +104,6 @@ Bash/WSL:
 ```bash
 docker run --rm -p 8000:8000 --env-file ./environments/local.env -v "$(pwd)/data:/app/data" promtior-rag:latest
 ```
+
+
+

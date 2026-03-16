@@ -4,6 +4,8 @@ const inputEl = document.getElementById("message-input");
 const errorEl = document.getElementById("error-message");
 
 let isSending = false;
+// Avoid colliding with window.history; track chat messages here
+let chatHistory = [];
 
 function appendMessage(role, text) {
     const row = document.createElement("div");
@@ -98,6 +100,7 @@ async function sendMessage(text) {
     formEl.querySelector("button[type='submit']").disabled = true;
 
     appendMessage("user", text);
+    chatHistory.push({ role: "user", content: text });
     setTyping(true);
 
     try {
@@ -107,7 +110,7 @@ async function sendMessage(text) {
         const res = await fetch("/chat/stream", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ input: text, history }),
+            body: JSON.stringify({ input: text, history: chatHistory }),
             signal,
         });
         if (!res.ok || !res.body) {
@@ -159,7 +162,7 @@ async function sendMessage(text) {
         const finalRes = await fetch("/chat/invoke", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ input: text, history }),
+            body: JSON.stringify({ input: text, history: chatHistory }),
         });
         if (!finalRes.ok) {
             let rid = finalRes.headers.get('X-Request-ID') || undefined;
@@ -176,6 +179,7 @@ async function sendMessage(text) {
         const payload = finalData?.output ?? finalData;
         if (payload && payload.answer) {
             bubble.innerHTML = renderMarkdownSafe(payload.answer);
+            chatHistory.push({ role: "assistant", content: payload.answer });
             history.push({ role: "assistant", content: payload.answer });
             // Render citations if available
             if (Array.isArray(payload.sources) && payload.sources.length) {

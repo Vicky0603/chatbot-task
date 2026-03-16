@@ -232,6 +232,7 @@ Follow these steps to get a production URL in minutes.
   - `API_KEY=some-strong-secret` (requires `x-api-key` header on `/chat/*` and `/promtior-rag/*`)
   - `RATE_LIMIT_ENABLED=true`, `RATE_LIMIT_PER_MINUTE=60`
   - `PROTECT_WITH_BASIC_AUTH=true`, `PROTECT_USERNAME=admin`, `PROTECT_PASSWORD=secret`
+  - `AUTO_INDEX_ON_START=true` (default): build the vector store automatically on first boot if missing.
 
 3) Add a persistent volume (Service → Settings → Volumes)
 - Add a volume named `data` and mount it at `/app/data`.
@@ -258,4 +259,5 @@ Follow these steps to get a production URL in minutes.
 Notes
 - To update content later, rerun the index job (Step 4) to refresh the vectorstore while keeping the same volume.
 - Optional features can be toggled via env (e.g., `ENABLE_HTML_CHUNKING=true`, `ENABLE_SITEMAP_DISCOVERY=true`, `RERANK_PROVIDER=cohere`).
- - To avoid any Hugging Face calls, keep `EMBEDDINGS_PROVIDER=openai` (default) and `RERANK_PROVIDER=none`.
+- To avoid any Hugging Face calls, keep `EMBEDDINGS_PROVIDER=openai` (default) and `RERANK_PROVIDER=none`.
+ - If `AUTO_INDEX_ON_START=true`, the app builds the index on first boot; /healthz will show `"indexing": true` during the process.

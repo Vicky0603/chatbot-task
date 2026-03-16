@@ -21,6 +21,9 @@ from typing import List, Dict
 from src.query.rewriter import rewrite_query
 from src.query.classifier import classify, retrieval_params
 from src.chains import rag_chain as rc
+import asyncio
+import os
+from src.ingestion.build_vector_store import build_vector_store
 
 setup_logging(settings.log_level)
 setup_tracing_from_env()
@@ -122,6 +125,7 @@ def healthz():
             "path": vector_dir,
             "exists": vs_exists,
         },
+        "indexing": bool(getattr(app.state, "indexing", False)),
         "playground": "/promtior-rag/playground/",
     }
     return JSONResponse(status_code=200, content=status)
@@ -171,6 +175,26 @@ def render_messages(history: List[Dict], question: str, context: str) -> List:
     for m in sys:
         msgs.append(m)
     return msgs
+
+
+@app.on_event("startup")
+async def maybe_build_index_on_start():
+    try:
+        if not settings.auto_index_on_start:
+            return
+        vector_dir = settings.vectorstore_dir
+        needs_build = (not os.path.isdir(vector_dir)) or (not any(True for _ in os.scandir(vector_dir)))
+        if not needs_build:
+            return
+        # Avoid duplicate runs
+        setattr(app.state, "indexing", True)
+        loop = asyncio.get_running_loop()
+        # Run in a thread to avoid blocking the event loop
+        await loop.run_in_executor(None, build_vector_store)
+    except Exception as e:
+        logger.warning("Auto index build failed: %s", e)
+    finally:
+        setattr(app.state, "indexing", False)
 
 
 @app.post("/chat/invoke")

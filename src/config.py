@@ -83,5 +83,7 @@ class Settings(BaseModel):
     metrics_enabled: bool = os.getenv("METRICS_ENABLED", "true").lower() == "true"
     # Scoped API keys for specific route prefixes (JSON: {"/metrics":"key1","/chat":"key2"})
     route_api_keys_json: str | None = os.getenv("ROUTE_API_KEYS_JSON")
+    # Auto index on start if vectorstore is missing
+    auto_index_on_start: bool = os.getenv("AUTO_INDEX_ON_START", "true").lower() == "true"
 
 settings = Settings()

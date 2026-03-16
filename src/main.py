@@ -24,6 +24,7 @@ from src.chains import rag_chain as rc
 import asyncio
 import os
 from src.ingestion.build_vector_store import build_vector_store
+from src.chains.verify import groundedness_score
 
 setup_logging(settings.log_level)
 setup_tracing_from_env()
@@ -231,7 +232,13 @@ async def chat_invoke(payload: dict):
     )
     if not show_sources:
         srcs = []
-    payload = {"answer": answer, "sources": srcs, "rewritten_query": info["query"], "confidence": info["confidence"]}
+    # Display confidence: use rerank-based if available; otherwise fallback to groundedness heuristic
+    if conf <= 0.0:
+        g_score, _ = groundedness_score(answer, [d.page_content for d in info.get("docs", [])])
+        disp_conf = float(g_score)
+    else:
+        disp_conf = conf
+    payload = {"answer": answer, "sources": srcs, "rewritten_query": info["query"], "confidence": disp_conf}
     return payload
 
 
@@ -255,7 +262,14 @@ async def chat_stream(payload: dict):
             pass
         finally:
             # Decide whether to include sources in the final event
+            # Display confidence: prefer rerank-based; fallback to groundedness
             conf = float(info.get("confidence") or 0.0)
+            if conf <= 0.0:
+                try:
+                    g_score, _ = groundedness_score("", [d.page_content for d in info.get("docs", [])])
+                    conf = float(g_score)
+                except Exception:
+                    conf = 0.0
             include_sources = (
                 (info.get("qc") != "other")
                 and (len(info.get("sources") or []) >= settings.min_sources_required)
@@ -266,7 +280,7 @@ async def chat_stream(payload: dict):
                 "data": {
                     "sources": (info["sources"] if include_sources else []),
                     "rewritten_query": info["query"],
-                    "confidence": info["confidence"],
+                    "confidence": conf,
                 },
             }
             yield f"data: {json.dumps(final_payload)}\n\n"

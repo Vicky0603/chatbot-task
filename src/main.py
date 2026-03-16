@@ -182,7 +182,7 @@ async def chat_invoke(payload: dict):
     info = build_context(text)
     llm = rc._choose_llm(info.get("scores") or [])
     messages = render_messages(history, text, info["context"])
-    out = (rc.llm if llm is rc.llm else llm).invoke(messages)
+    out = llm.invoke(messages)
     answer = getattr(out, "content", str(out))
     payload = {"answer": answer, "sources": info["sources"], "rewritten_query": info["query"], "confidence": info["confidence"]}
     payload = rc._apply_hallucination_guard(payload)
@@ -201,7 +201,7 @@ async def chat_stream(payload: dict):
 
     def gen():
         try:
-            for chunk in (rc.llm if llm is rc.llm else llm).stream(messages):
+            for chunk in llm.stream(messages):
                 token = getattr(chunk, "content", "")
                 if token:
                     yield f"data: {json.dumps({'type':'token','data': token})}\n\n"

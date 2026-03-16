@@ -113,15 +113,16 @@ Answer in a clear and concise way.
 """
 )
 
-# LLM
-llm = ChatOpenAI(
-    model=settings.model_name,
-    api_key=settings.openai_api_key,
-    temperature=0,
-)
-llm_fallback = None
-if settings.fallback_model_name and settings.fallback_model_name != settings.model_name:
-    llm_fallback = ChatOpenAI(model=settings.fallback_model_name, api_key=settings.openai_api_key, temperature=0)
+# LLMs are initialized lazily to avoid import-time failures if env is missing
+_llm = None
+_llm_fallback = None
+
+def _ensure_llms():
+    global _llm, _llm_fallback
+    if _llm is None:
+        _llm = ChatOpenAI(model=settings.model_name, api_key=settings.openai_api_key, temperature=0)
+    if settings.fallback_model_name and settings.fallback_model_name != settings.model_name and _llm_fallback is None:
+        _llm_fallback = ChatOpenAI(model=settings.fallback_model_name, api_key=settings.openai_api_key, temperature=0)
 
 
 def _highlight_preview(preview: str, query: str, max_len: int = 200) -> str:
@@ -207,10 +208,11 @@ _docs = _pre | RunnableLambda(lambda x: {**x, "docs": _retrieve(x)})
 _docs = _docs | RunnableLambda(lambda x: (lambda rr: {**x, "docs": rr[0], "scores": rr[1]})(_maybe_rerank(x)))
 
 def _choose_llm(scores: List[float]):
+    _ensure_llms()
     conf = _confidence_from_scores(scores)
-    if conf < settings.confidence_threshold and llm_fallback is not None:
-        return llm_fallback
-    return llm
+    if conf < settings.confidence_threshold and _llm_fallback is not None:
+        return _llm_fallback
+    return _llm
 
 _answer = (
     _docs

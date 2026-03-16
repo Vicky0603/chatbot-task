@@ -27,8 +27,15 @@ def _format_docs(docs: List[Document]) -> str:
     return "\n\n".join(doc.page_content for doc in docs)
 
 
-# Load vector store and create retriever
-_vectorstore = get_vectorstore()
+_vectorstore = None
+_bm25_retriever = None
+
+def _ensure_vectorstore():
+    global _vectorstore, _bm25_retriever
+    if _vectorstore is None:
+        _vectorstore = get_vectorstore()
+    if _bm25_retriever is None:
+        _bm25_retriever = _build_bm25_from_chroma(_vectorstore)
 
 def _build_bm25_from_chroma(vs) -> BM25Retriever | None:
     try:
@@ -47,19 +54,18 @@ def _build_bm25_from_chroma(vs) -> BM25Retriever | None:
 
 # Vector retriever: created per-call to support dynamic k
 
-# BM25 retriever built from stored documents (if available)
-bm25_retriever = _build_bm25_from_chroma(_vectorstore)
 
 # We'll do hybrid retrieval manually to allow dynamic k/weights per query
 def _hybrid_retrieve(query: str, k_vec: int, k_bm25: int, weights: tuple[float, float]) -> List[Document]:
+    _ensure_vectorstore()
     # Create a temporary retriever with dynamic k for vectors
     try:
         vec_r = _vectorstore.as_retriever(search_type="mmr", search_kwargs={"k": int(k_vec), "fetch_k": max(24, int(k_vec) * 3)})
         vec_docs = vec_r.invoke(query)  # type: ignore[assignment]
     except Exception:
         vec_docs = []
-    if bm25_retriever is not None:
-        bm_docs = bm25_retriever.get_relevant_documents(query)[:k_bm25]
+    if _bm25_retriever is not None:
+        bm_docs = _bm25_retriever.get_relevant_documents(query)[:k_bm25]
     else:
         bm_docs = []
     # Simple weighted interleave: score=rank-based

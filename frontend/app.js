@@ -180,7 +180,6 @@ async function sendMessage(text) {
         if (payload && payload.answer) {
             bubble.innerHTML = renderMarkdownSafe(payload.answer);
             chatHistory.push({ role: "assistant", content: payload.answer });
-            history.push({ role: "assistant", content: payload.answer });
             // Render citations if available
             if (Array.isArray(payload.sources) && payload.sources.length) {
                 const cites = document.createElement("div");

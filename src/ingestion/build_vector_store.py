@@ -5,7 +5,7 @@ import time
 
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
 
 from src.ingestion.load_promtior_site import get_promtior_documents
 from src.config import settings
@@ -42,17 +42,17 @@ def build_vector_store() -> None:
         return
 
     # Chunking
+    # Prefer token-aware splitting; fall back to character splitter
     try:
+        tok_splitter = TokenTextSplitter(chunk_size=500, chunk_overlap=100)
+        split_docs = tok_splitter.split_documents(docs)
+    except Exception:
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=800,
             chunk_overlap=200,
             length_function=len,
         )
-    except Exception as e:
-        print("Error initializing text splitter:", e)
-        raise
-
-    split_docs = text_splitter.split_documents(docs)
+        split_docs = text_splitter.split_documents(docs)
     print(f"Total chunks after split: {len(split_docs)}")
 
     # OpenAI embeddings required (no sentence-transformers fallback)
@@ -86,6 +86,9 @@ def build_vector_store() -> None:
         meta = dict(getattr(d, "metadata", {}) or {})
         src = meta.get("source") or meta.get("url") or meta.get("source_type") or "unknown"
         src = str(src)
+        # Propagate page title into headers if present
+        if meta.get("title") and not meta.get("h1"):
+            meta["h1"] = meta.get("title")
         cid = _chunk_id(src, d.page_content or "", i)
         meta["source"] = src
         meta["chunk_index"] = i

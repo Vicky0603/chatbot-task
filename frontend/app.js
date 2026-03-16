@@ -25,7 +25,12 @@ function appendMessage(role, text) {
 
     const bubble = document.createElement("div");
     bubble.classList.add("message-bubble");
-    bubble.textContent = text;
+    // Render markdown for bot, plain text for user
+    if (role === "bot") {
+        bubble.innerHTML = renderMarkdownSafe(text);
+    } else {
+        bubble.textContent = text;
+    }
 
     if (role === "user") {
         row.appendChild(bubble);
@@ -99,10 +104,10 @@ async function sendMessage(text) {
         // Try streaming partial tokens first
         const controller = new AbortController();
         const signal = controller.signal;
-        const res = await fetch("/promtior-rag/stream", {
+        const res = await fetch("/chat/stream", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ input: text }),
+            body: JSON.stringify({ input: text, history }),
             signal,
         });
         if (!res.ok || !res.body) {
@@ -138,21 +143,23 @@ async function sendMessage(text) {
                 const json = line.replace(/^data:\s*/, "");
                 try {
                     const evt = JSON.parse(json);
-                    const token = typeof evt === "string" ? evt : (evt?.data ?? evt?.token ?? evt?.content ?? "");
-                    if (token) bubble.textContent += token;
+                    if (evt.type === "token") {
+                        const token = evt.data || "";
+                        if (token) bubble.innerHTML = renderMarkdownSafe((bubble.textContent || "") + token);
+                    }
                 } catch (_) {
                     // Fallback: append raw text
-                    bubble.textContent += json;
+                    bubble.innerHTML = renderMarkdownSafe(bubble.textContent + json);
                 }
             }
             messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
         // After stream ends, fetch final structured answer (to get citations)
-        const finalRes = await fetch("/promtior-rag/invoke", {
+        const finalRes = await fetch("/chat/invoke", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ input: text }),
+            body: JSON.stringify({ input: text, history }),
         });
         if (!finalRes.ok) {
             let rid = finalRes.headers.get('X-Request-ID') || undefined;
@@ -168,7 +175,8 @@ async function sendMessage(text) {
         const finalData = await finalRes.json();
         const payload = finalData?.output ?? finalData;
         if (payload && payload.answer) {
-            bubble.textContent = payload.answer;
+            bubble.innerHTML = renderMarkdownSafe(payload.answer);
+            history.push({ role: "assistant", content: payload.answer });
             // Render citations if available
             if (Array.isArray(payload.sources) && payload.sources.length) {
                 const cites = document.createElement("div");
@@ -179,19 +187,20 @@ async function sendMessage(text) {
                 title.textContent = "Sources:";
                 cites.appendChild(title);
                 const ul = document.createElement("ul");
-                for (const s of payload.sources.slice(0, 3)) {
+                let idx = 1;
+                for (const s of payload.sources.slice(0, 5)) {
                     const li = document.createElement("li");
                     const label = document.createElement("div");
                     // Clickable link if url available
                     if (s.url) {
                         const a = document.createElement("a");
-                        a.href = s.url;
+                        a.href = s.fragment ? `${s.url}${s.fragment}` : s.url;
                         a.target = "_blank";
                         a.rel = "noopener noreferrer";
-                        a.textContent = `${s.source || s.url}`;
+                        a.textContent = `[${idx}] ${s.source || s.url}`;
                         label.appendChild(a);
                     } else {
-                        label.textContent = `${s.source}`;
+                        label.textContent = `[${idx}] ${s.source}`;
                     }
                     li.appendChild(label);
                     // Matched preview with highlights
@@ -203,10 +212,19 @@ async function sendMessage(text) {
                         li.appendChild(prev);
                     }
                     ul.appendChild(li);
+                    idx += 1;
                 }
                 cites.appendChild(ul);
                 bubble.appendChild(document.createElement("br"));
                 bubble.appendChild(cites);
+                const toggle = document.createElement("button");
+                toggle.textContent = "Toggle previews";
+                toggle.style.marginTop = "4px";
+                toggle.onclick = () => {
+                    const items = ul.querySelectorAll("div");
+                    items.forEach(d => d.style.display = (d.style.display === "none" ? "" : "none"));
+                };
+                cites.appendChild(toggle);
             }
             // Confidence badge if available
             if (typeof payload.confidence === 'number') {
@@ -218,6 +236,22 @@ async function sendMessage(text) {
                 conf.textContent = `Confidence: ${pct}%`;
                 bubble.appendChild(conf);
             }
+            // Copy button
+            const copyBtn = document.createElement("button");
+            copyBtn.textContent = "Copy";
+            copyBtn.style.marginTop = "6px";
+            copyBtn.onclick = () => navigator.clipboard.writeText(payload.answer || "");
+            bubble.appendChild(copyBtn);
+            const fb = document.createElement("div");
+            fb.style.marginTop = "6px";
+            const up = document.createElement("button");
+            up.textContent = "👍";
+            up.onclick = () => sendFeedback("up");
+            const down = document.createElement("button");
+            down.textContent = "👎";
+            down.onclick = () => sendFeedback("down");
+            fb.appendChild(up); fb.appendChild(down);
+            bubble.appendChild(fb);
         }
     } catch (err) {
         console.error(err);
@@ -250,3 +284,35 @@ appendMessage(
     "bot",
     "Hi, I'm the Promtior assistant. You can ask me about services, when the company was founded, or other information based on its content."
 );
+
+// Basic, minimal markdown renderer with sanitizer
+function escapeHtml(s) {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+}
+
+function renderMarkdownSafe(md) {
+    let s = String(md || "");
+    s = s.replace(/\r/g, "");
+    // code blocks ```
+    s = s.replace(/```([\s\S]*?)```/g, (m, p1) => `<pre><code>${escapeHtml(p1)}</code></pre>`);
+    // inline code `code`
+    s = s.replace(/`([^`]+)`/g, (m, p1) => `<code>${escapeHtml(p1)}</code>`);
+    // bold **text**
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // italics *text*
+    s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // links [text](url)
+    s = s.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1<\/a>');
+    // newlines -> <br>
+    s = s.replace(/\n/g, "<br>");
+    return s;
+}
+
+async function sendFeedback(rating) {
+  try {
+    await fetch('/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rating }) });
+  } catch (e) { /* ignore */ }
+}

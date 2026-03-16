@@ -1,9 +1,11 @@
+
 # Promtior RAG Chatbot — Architecture & Enhancements
 
 ## Overview
 This document details the architecture, rationale, and implemented enhancements that improve retrieval quality, UX, and operations. It complements the quickstart in `README.md` and the high‑level description in `doc/project_overview.md`.
 
 ## Architecture Summary
+
 - Data ingestion: website pages and optional PDFs + curated notes (`data/raw/*.md|*.txt`).
 - Indexing: chunking with `RecursiveCharacterTextSplitter`, embeddings with OpenAI, persisted in Chroma.
 - Retrieval: hybrid BM25 + vector (MMR), with optional cross-encoder reranking.
@@ -108,3 +110,47 @@ Key files
 
 ---
 This document records the architecture and the enhancement rationale to guide maintenance and future development.
+7) Pluggable embeddings
+   - Supports OpenAI and E5 via `EMBEDDINGS_PROVIDER` with per-provider model configuration.
+   - Writes `meta.json` next to the vector store with provider info.
+
+8) Query classification
+   - Heuristic classification influences retrieval params (`k`, weights) per query type.
+   - Code: `src/query/classifier.py`.
+
+9) Diversified rerankers
+   - Cohere API reranker available via `RERANK_PROVIDER=cohere` (requires `COHERE_API_KEY`), otherwise local CrossEncoder.
+
+10) Hallucination guard
+   - Enforces `MIN_SOURCES_REQUIRED` and `CONFIDENCE_THRESHOLD` before returning an answer, asks for clarification otherwise.
+
+11) Response cache
+   - In-memory cache of final answers keyed by rewritten query and top document IDs.
+
+12) Security & UX
+   - CSP headers; configurable CORS `ALLOWED_ORIGINS`; optional API key `API_KEY` for programmatic access.
+   - UI renders markdown safely (basic support), adds copy button, clickable sources with highlights.
+
+13) Data ops
+   - Optional `data/sources.yaml` registry augments the static URL list from code.
+
+14) HTML-aware chunking and anchors
+   - Optional (`ENABLE_HTML_CHUNKING=true`) parses pages into section-level chunks with `metadata.fragment` for footnotes and deep links.
+
+15) Sitemap/robots discovery
+   - Optional (`ENABLE_SITEMAP_DISCOVERY=true`) fetches robots.txt and sitemaps to auto-augment URLs.
+
+16) Observability
+   - Prometheus metrics exposed at `/metrics` (`METRICS_ENABLED=true`), tracking requests and retrieval counts.
+   - OpenTelemetry instrumentation (`OTEL_ENABLED=true`), export via `OTEL_EXPORTER_OTLP_ENDPOINT`.
+
+17) Structured streaming
+   - New endpoints `/chat/stream` (SSE JSON events) and `/chat/invoke` for multi-turn interactions with client-side history.
+
+18) Verification and fallbacks
+   - Simple groundedness score computation with sentence support matches.
+   - Fallback model selection if predicted confidence is low (`FALLBACK_MODEL_NAME`).
+
+19) Access control
+   - Optional per-route API keys via `ROUTE_API_KEYS_JSON` mapping path prefixes to required keys.
+- Updated component diagram: see `doc/Component-Diagram.png` (source: `doc/component-diagram.mmd`).

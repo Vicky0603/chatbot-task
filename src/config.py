@@ -49,6 +49,13 @@ class Settings(BaseModel):
     vectorstore_dir: str = os.getenv("VECTORSTORE_DIR", "./data/vectorstore")
     frontend_dir: str = os.getenv("FRONTEND_DIR", "./frontend")
     log_level: str = os.getenv("APP_LOG_LEVEL", "info")
+    # CORS / Security
+    allowed_origins: str = os.getenv("ALLOWED_ORIGINS", "*")
+    content_security_policy: str = os.getenv(
+        "CONTENT_SECURITY_POLICY",
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self'"
+    )
+    api_key: str | None = os.getenv("API_KEY")
     # Runtime flag: indicates whether OpenAI is usable (true by default)
     openai_usable: bool = True
     # Rate limit & auth
@@ -57,5 +64,24 @@ class Settings(BaseModel):
     basic_auth_enabled: bool = os.getenv("PROTECT_WITH_BASIC_AUTH", "false").lower() == "true"
     basic_auth_user: str | None = os.getenv("PROTECT_USERNAME")
     basic_auth_pass: str | None = os.getenv("PROTECT_PASSWORD")
+    # Embeddings provider
+    embeddings_provider: str = os.getenv("EMBEDDINGS_PROVIDER", "openai")  # openai|e5
+    embeddings_model: str = os.getenv("EMBEDDINGS_MODEL", "text-embedding-3-small")
+    e5_model_name: str = os.getenv("E5_MODEL_NAME", "intfloat/e5-small-v2")
+    # Reranking
+    rerank_provider: str = os.getenv("RERANK_PROVIDER", "local")  # local|cohere
+    cohere_api_key: str | None = os.getenv("COHERE_API_KEY")
+    # Hallucination guard
+    min_sources_required: int = int(os.getenv("MIN_SOURCES_REQUIRED", "1"))
+    confidence_threshold: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.35"))
+    # Fallback model
+    fallback_model_name: str | None = os.getenv("FALLBACK_MODEL_NAME")
+    # Discovery & chunking
+    enable_sitemap_discovery: bool = os.getenv("ENABLE_SITEMAP_DISCOVERY", "false").lower() == "true"
+    enable_html_chunking: bool = os.getenv("ENABLE_HTML_CHUNKING", "false").lower() == "true"
+    # Metrics / tracing
+    metrics_enabled: bool = os.getenv("METRICS_ENABLED", "true").lower() == "true"
+    # Scoped API keys for specific route prefixes (JSON: {"/metrics":"key1","/chat":"key2"})
+    route_api_keys_json: str | None = os.getenv("ROUTE_API_KEYS_JSON")
 
 settings = Settings()

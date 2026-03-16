@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from src.config import settings
 import re
+import json
+from pathlib import Path
 
 def get_vectorstore() -> Chroma:
     """
@@ -20,24 +23,43 @@ def get_vectorstore() -> Chroma:
                 "OPENAI_API_KEY not set. Configure the OPENAI_API_KEY environment variable "
                 "to use OpenAI embeddings in production."
             )
-        return OpenAIEmbeddings(model="text-embedding-3-small", api_key=settings.openai_api_key)
+        model = settings.embeddings_model or "text-embedding-3-small"
+        return OpenAIEmbeddings(model=model, api_key=settings.openai_api_key)
+
+    def make_e5():
+        model_name = settings.e5_model_name or "intfloat/e5-small-v2"
+        # Normalize pooling option for E5 if needed
+        return HuggingFaceEmbeddings(model_name=model_name)
 
     # Initialize OpenAI embeddings (will fail if no key)
-    try:
+    provider = (settings.embeddings_provider or "openai").lower()
+    if provider == "openai":
         embeddings = make_openai()
-        # quick connectivity/functionality check
         try:
-            embeddings.embed_documents(["test"])
+            embeddings.embed_documents(["test"])  # quick check
             settings.openai_usable = True
         except Exception:
             settings.openai_usable = False
             raise RuntimeError("Could not generate embeddings with OpenAI. Check OPENAI_API_KEY and connectivity.")
-    except Exception as e:
-        # Propagar error con mensaje claro
-        raise
+    elif provider == "e5":
+        embeddings = make_e5()
+    else:
+        raise RuntimeError(f"Unsupported EMBEDDINGS_PROVIDER='{provider}'. Use 'openai' or 'e5'.")
 
     # Create Chroma using the chosen embedding function
     vectorstore = Chroma(persist_directory=str(vector_dir), embedding_function=embeddings)
+    # Persist provider metadata alongside the collection for ops clarity
+    try:
+        meta = {
+            "provider": provider,
+            "openai_model": getattr(settings, "embeddings_model", None),
+            "e5_model": getattr(settings, "e5_model_name", None),
+        }
+        meta_path = Path(vector_dir) / "meta.json"
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f)
+    except Exception:
+        pass
 
     # Quick compatibility test: similarity_search to detect embedding-dimension mismatch
     try:

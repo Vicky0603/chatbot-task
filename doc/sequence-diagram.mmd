@@ -1,0 +1,31 @@
+sequenceDiagram
+    participant U as User (Browser)
+    participant FE as Frontend (app.js)
+    participant API as FastAPI
+    participant RAG as RAG Chain
+    participant RET as Retrieval
+    participant RR as Reranker
+    participant LLM as LLM / Fallback
+    participant VS as Chroma Vector Store
+
+    U->>FE: Type question
+    FE->>API: POST /chat/stream {input, history}
+    API->>RAG: rewrite + classify
+    RAG->>RET: hybrid retrieve (BM25 + MMR)
+    RET->>VS: query (k, fetch_k)
+    VS-->>RET: candidate chunks
+    RAG->>RR: rerank (optional)
+    RR-->>RAG: reranked docs + scores
+    RAG->>LLM: prompt(context, question)
+    LLM-->>API: token stream
+    API-->>FE: SSE events {type:'token', data}
+    Note over API,FE: After stream completes
+    FE->>API: POST /chat/invoke {input, history}
+    API->>RAG: finalize answer + sources + confidence
+    RAG-->>API: structured payload
+    API-->>FE: JSON {answer, sources, rewritten_query, confidence}
+    FE->>FE: Render markdown, footnotes, previews, feedback
+
+    alt Low confidence or insufficient sources
+        API->>FE: Clarify/ask follow‑up (hallucination guard)
+    end

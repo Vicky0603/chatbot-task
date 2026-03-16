@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import List, Optional, Any, Tuple
+import yaml
 
 from langchain_community.document_loaders import WebBaseLoader, PyPDFLoader, TextLoader
+import requests
+from bs4 import BeautifulSoup
+from hashlib import sha1
+from src.config import settings
+from src.ingestion.html_chunker import fetch_html, extract_sections
 
 Document = Any
 
@@ -35,10 +41,51 @@ def load_promtior_web_pages(urls: Optional[List[str]] = None) -> List[Document]:
     """
     if urls is None:
         urls = PROMTIOR_URLS
+    # Extend with registry URLs if present
+    urls = list(dict.fromkeys(urls + load_sources_registry()))
 
     loader = WebBaseLoader(urls)
     docs = loader.load()
+    # Add DOM hash to metadata for freshness tracking
+    for d in docs:
+        u = d.metadata.get("source") or d.metadata.get("url")
+        if not u:
+            continue
+        html, dom_hash = fetch_html(u)
+        if dom_hash:
+            d.metadata["dom_hash"] = dom_hash
+        d.metadata.setdefault("title", d.metadata.get("title") or "")
     return docs
+
+
+def discover_urls_from_sitemaps(base_urls: List[str]) -> List[str]:
+    if not settings.enable_sitemap_discovery:
+        return []
+    found: List[str] = []
+    sess = requests.Session()
+    for base in base_urls:
+        try:
+            robots = base.rstrip("/") + "/robots.txt"
+            r = sess.get(robots, timeout=10)
+            if r.status_code != 200:
+                continue
+            for line in r.text.splitlines():
+                if line.lower().startswith("sitemap:"):
+                    sm_url = line.split(":", 1)[1].strip()
+                    try:
+                        sm = sess.get(sm_url, timeout=15)
+                        if sm.status_code == 200:
+                            soup = BeautifulSoup(sm.text, "xml")
+                            for loc in soup.find_all("loc"):
+                                url = (loc.text or "").strip()
+                                if url:
+                                    found.append(url)
+                    except Exception:
+                        continue
+        except Exception:
+            continue
+    # dedupe
+    return list(dict.fromkeys(found))
 
 
 def load_promtior_presentation() -> List[Document]:
@@ -102,6 +149,8 @@ def get_promtior_documents(
     if extra_urls:
         urls.extend(extra_urls)
 
+    # augment urls with sitemaps if enabled
+    urls = list(dict.fromkeys(urls + discover_urls_from_sitemaps(["https://www.promtior.ai/"])) )
     web_docs = load_promtior_web_pages(urls)
     pdf_docs: List[Document] = []
     note_docs: List[Document] = []
@@ -109,6 +158,20 @@ def get_promtior_documents(
     if include_presentation:
         pdf_docs = load_promtior_presentation()
         note_docs = load_local_text_notes()
+
+    # Optional HTML-aware chunking
+    if settings.enable_html_chunking:
+        section_docs: List[Document] = []
+        for d in web_docs:
+            u = d.metadata.get("source") or d.metadata.get("url")
+            if not u:
+                continue
+            html, _ = fetch_html(u)
+            if not html:
+                continue
+            section_docs.extend(extract_sections(u, html))
+        if section_docs:
+            web_docs = section_docs
 
     all_docs = web_docs + pdf_docs + note_docs
 
@@ -127,3 +190,20 @@ if __name__ == "__main__":
     if docs:
         print("Content example:\n")
         print(docs[0].page_content[:1000])
+def load_sources_registry() -> List[str]:
+    """Load optional YAML source registry at data/sources.yaml."""
+    try:
+        path = get_project_root() / "data" / "sources.yaml"
+        if not path.exists():
+            return []
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        urls = []
+        for item in data.get("urls", []):
+            if isinstance(item, str):
+                urls.append(item)
+            elif isinstance(item, dict) and item.get("url"):
+                urls.append(item["url"])
+        return urls
+    except Exception:
+        return []

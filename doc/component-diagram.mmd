@@ -1,0 +1,75 @@
+flowchart TB
+  subgraph Client[Browser]
+    UI[Frontend (index.html/app.js)]
+  end
+
+  subgraph API[FastAPI App]
+    direction TB
+    MW1[RequestID / RateLimit / BasicAuth]
+    MW2[CORS + CSP Headers]
+    MW3[API Key Guard (global + scoped)]
+    Routes[Routes]
+    Routes -->|LangServe| LS[/promtior-rag/*/]
+    Routes -->|Structured Chat| Chat[/chat/invoke, /chat/stream/]
+    Routes --> FB[/feedback/]
+    Routes --> MET[/metrics/]
+  end
+
+  UI -->|SSE JSON tokens| Chat
+  UI -->|Invoke| Chat
+  UI -->|Static| API
+
+  subgraph RAG[Retrieval & Generation]
+    direction TB
+    QR[Query Rewriter]
+    QC[Query Classifier]
+    HY[Hybrid Retrieval (MMR vec + BM25)]
+    RE[Optional Reranker (Cohere/CrossEncoder)]
+    CA[Response Cache]
+    PR[Prompt]
+    LLM[[LLM Primary]]
+    FLLM[[LLM Fallback]]
+    VG[Verification (Groundedness)]
+    HG[Hallucination Guard]
+  end
+
+  Chat --> QR --> QC --> HY --> RE --> CA --> PR --> LLM
+  RE -->|scores| PR
+  RE -->|scores| FLLM
+  PR --> FLLM
+  LLM --> VG --> HG
+  FLLM --> VG
+  HG -->|answer + sources + confidence| Chat
+  LS -->|same chain| RAG
+
+  subgraph Store[Vector Store & Embeddings]
+    direction TB
+    VS[(Chroma)]
+    EMB[(Embeddings: OpenAI or E5)]
+  end
+
+  HY --> VS
+  VS -.uses.-> EMB
+
+  subgraph Ingestion[Ingestion & Indexing]
+    direction TB
+    REG[(data/sources.yaml)]
+    SM[Robots/Sitemaps Discovery]
+    HTML[HTML-Aware Chunker + Anchors]
+    SPL[Token/Sentence Split]
+    IDX[Incremental Indexing (Chunk IDs)]
+  end
+
+  REG --> SM --> HTML --> SPL --> IDX --> VS
+
+  subgraph Obs[Observability]
+    direction TB
+    OTEL[OpenTelemetry]
+    METRIC[Prometheus /metrics]
+    LOGS[Structured Logs]
+  end
+
+  API -.instrumented by.-> OTEL
+  API -.exposes.-> METRIC
+  API -.emits.-> LOGS
+

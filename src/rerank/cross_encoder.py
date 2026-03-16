@@ -58,3 +58,44 @@ class CrossEncoderReranker:
                 pass
         return reranked_docs, reranked_scores
 
+
+class CohereReranker:
+    def __init__(self, api_key: str, model: str = "rerank-english-v3.0") -> None:
+        self.api_key = api_key
+        self.model = model
+
+    @classmethod
+    def from_env(cls) -> Optional["CohereReranker"]:
+        key = os.getenv("COHERE_API_KEY")
+        if not key:
+            return None
+        return cls(api_key=key)
+
+    def rerank(self, query: str, docs: List[Any], top_k: int = 8) -> Tuple[List[Any], List[float]]:
+        import requests
+        endpoint = "https://api.cohere.com/v1/rerank"
+        contents = [d.page_content or "" for d in docs]
+        payload = {
+            "model": self.model,
+            "query": query,
+            "documents": contents,
+            "top_n": min(top_k, len(contents)),
+        }
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        try:
+            resp = requests.post(endpoint, json=payload, headers=headers, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            results = data.get("results", [])
+            results.sort(key=lambda r: float(r.get("relevance_score", 0.0)), reverse=True)
+            idxs = [int(r.get("index", 0)) for r in results]
+            scores = [float(r.get("relevance_score", 0.0)) for r in results]
+            reranked_docs = [docs[i] for i in idxs]
+            for d, s in zip(reranked_docs, scores):
+                try:
+                    d.metadata["rerank_score"] = float(s)
+                except Exception:
+                    pass
+            return reranked_docs, scores
+        except Exception:
+            return docs, [0.0 for _ in docs]

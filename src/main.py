@@ -159,7 +159,7 @@ def build_context(question: str) -> Dict:
     ctx = rc._format_docs(docs)
     sources = rc._extract_citations(docs, question)
     conf = rc._confidence_from_scores(scores)
-    return {"query": rq, "docs": docs, "context": ctx, "sources": sources, "confidence": conf, "scores": scores}
+    return {"query": rq, "qc": qc, "docs": docs, "context": ctx, "sources": sources, "confidence": conf, "scores": scores}
 
 
 def render_messages(history: List[Dict], question: str, context: str) -> List:
@@ -208,7 +208,18 @@ async def chat_invoke(payload: dict):
     messages = render_messages(history, text, info["context"])
     out = llm.invoke(messages)
     answer = getattr(out, "content", str(out))
-    payload = {"answer": answer, "sources": info["sources"], "rewritten_query": info["query"], "confidence": info["confidence"]}
+    # Suppress sources unless conditions are met
+    srcs = info["sources"]
+    conf = float(info.get("confidence") or 0.0)
+    show_sources = (
+        (info.get("qc") != "other")
+        and (len(srcs) >= settings.min_sources_required)
+        and (not answer.strip().lower().startswith("i don't know"))
+        and (conf >= settings.show_sources_min_conf)
+    )
+    if not show_sources:
+        srcs = []
+    payload = {"answer": answer, "sources": srcs, "rewritten_query": info["query"], "confidence": info["confidence"]}
     payload = rc._apply_hallucination_guard(payload)
     return payload
 
@@ -232,10 +243,17 @@ async def chat_stream(payload: dict):
         except Exception:
             pass
         finally:
+            # Decide whether to include sources in the final event
+            conf = float(info.get("confidence") or 0.0)
+            include_sources = (
+                (info.get("qc") != "other")
+                and (len(info.get("sources") or []) >= settings.min_sources_required)
+                and (conf >= settings.show_sources_min_conf)
+            )
             final_payload = {
                 "type": "final",
                 "data": {
-                    "sources": info["sources"],
+                    "sources": (info["sources"] if include_sources else []),
                     "rewritten_query": info["query"],
                     "confidence": info["confidence"],
                 },

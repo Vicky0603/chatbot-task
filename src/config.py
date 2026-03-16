@@ -74,6 +74,8 @@ class Settings(BaseModel):
     # Hallucination guard
     min_sources_required: int = int(os.getenv("MIN_SOURCES_REQUIRED", "1"))
     confidence_threshold: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.35"))
+    # Sources display control
+    show_sources_min_conf: float = float(os.getenv("SHOW_SOURCES_MIN_CONF", "0.75"))
     # Fallback model
     fallback_model_name: str | None = os.getenv("FALLBACK_MODEL_NAME")
     # Discovery & chunking

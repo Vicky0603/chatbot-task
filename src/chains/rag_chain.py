@@ -233,7 +233,9 @@ _confidence = _docs | RunnableLambda(lambda x: _confidence_from_scores(x.get("sc
 def _apply_hallucination_guard(payload: dict) -> dict:
     conf = float(payload.get("confidence") or 0.0)
     num_src = len(payload.get("sources") or [])
-    if num_src < settings.min_sources_required or conf < settings.confidence_threshold:
+    # Only enforce confidence threshold if we actually computed it (>0)
+    conf_gate = (conf > 0.0) and (conf < settings.confidence_threshold)
+    if num_src < settings.min_sources_required or conf_gate:
         return {
             **payload,
             "answer": "I don't have enough grounded context to answer confidently. Could you clarify or provide more details?",

@@ -175,16 +175,48 @@ async function sendMessage(text) {
                 cites.style.marginTop = "6px";
                 cites.style.fontSize = "0.8rem";
                 cites.style.opacity = "0.85";
-                cites.innerHTML = "Sources:";
+                const title = document.createElement("div");
+                title.textContent = "Sources:";
+                cites.appendChild(title);
                 const ul = document.createElement("ul");
                 for (const s of payload.sources.slice(0, 3)) {
                     const li = document.createElement("li");
-                    li.textContent = `${s.source}`;
+                    const label = document.createElement("div");
+                    // Clickable link if url available
+                    if (s.url) {
+                        const a = document.createElement("a");
+                        a.href = s.url;
+                        a.target = "_blank";
+                        a.rel = "noopener noreferrer";
+                        a.textContent = `${s.source || s.url}`;
+                        label.appendChild(a);
+                    } else {
+                        label.textContent = `${s.source}`;
+                    }
+                    li.appendChild(label);
+                    // Matched preview with highlights
+                    if (s.preview_html) {
+                        const prev = document.createElement("div");
+                        prev.style.opacity = "0.9";
+                        prev.style.marginTop = "2px";
+                        prev.innerHTML = s.preview_html;
+                        li.appendChild(prev);
+                    }
                     ul.appendChild(li);
                 }
                 cites.appendChild(ul);
                 bubble.appendChild(document.createElement("br"));
                 bubble.appendChild(cites);
+            }
+            // Confidence badge if available
+            if (typeof payload.confidence === 'number') {
+                const conf = document.createElement("div");
+                conf.style.marginTop = "8px";
+                conf.style.fontSize = "0.75rem";
+                conf.style.opacity = "0.8";
+                const pct = Math.round(payload.confidence * 100);
+                conf.textContent = `Confidence: ${pct}%`;
+                bubble.appendChild(conf);
             }
         }
     } catch (err) {

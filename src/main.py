@@ -11,8 +11,10 @@ from src.config import settings
 from src.api.errors import register_error_handlers
 from src.api.middleware import RequestIDMiddleware, RateLimitMiddleware, BasicAuthMiddleware
 from src.logging_config import setup_logging
+from src.telemetry.tracing import setup_tracing_from_env
 
 setup_logging(settings.log_level)
+setup_tracing_from_env()
 logger = logging.getLogger("app")
 
 app = FastAPI(title="Promtior RAG Chatbot")

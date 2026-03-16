@@ -9,6 +9,7 @@ Small RAG project exposing a LangServe endpoint and a static frontend to chat wi
 - Vector store builder: `src/ingestion/build_vector_store.py`
 - Vector store / embeddings: `src/vectorstore/loader.py`
 - Static frontend: `frontend/index.html`, `frontend/app.js`, `frontend/styles.css`
+- Architecture & Enhancements: `doc/ARCHITECTURE_AND_ENHANCEMENTS.md`
 
 ## Requirements
 - Python 3.10+
@@ -119,3 +120,15 @@ docker run --rm -p 8000:8000 --env-file ./environments/local.env -v "$(pwd)/data
 
 
 
+## Enhancements Included
+
+- Query rewriting: normalizes queries and expands domain terms (e.g., "company" → "Promtior").
+  - Config: override synonyms via `QUERY_SYNONYMS_JSON` (JSON dict).
+- Cross-encoder reranking: optional local reranker to improve retrieval ordering.
+  - Enable: `RERANKING_ENABLED=true` (default true)
+  - Model: `RERANKER_MODEL_NAME=cross-encoder/ms-marco-MiniLM-L-6-v2`
+- Citations UX: frontend shows clickable links (when available) and highlights matched spans.
+- Incremental indexing: ingestion computes deterministic chunk IDs and only embeds new/changed chunks; removes stale ones.
+- Telemetry: optional LangSmith/LC tracing.
+  - Enable: `ENABLE_TELEMETRY=true`, provide `LANGCHAIN_API_KEY` and optional `LANGCHAIN_PROJECT`.
+- Structured outputs: chain returns `answer`, `sources`, `rewritten_query`, and `confidence` (0–1).

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from src.config import settings
 import re
 import json
@@ -27,8 +26,13 @@ def get_vectorstore() -> Chroma:
         return OpenAIEmbeddings(model=model, api_key=settings.openai_api_key)
 
     def make_e5():
+        try:
+            from langchain_community.embeddings import HuggingFaceEmbeddings  # type: ignore
+        except Exception as e:
+            raise RuntimeError(
+                "HuggingFace embeddings not available. To use EMBEDDINGS_PROVIDER=e5, install sentence-transformers and its dependencies, or switch to OpenAI embeddings."
+            ) from e
         model_name = settings.e5_model_name or "intfloat/e5-small-v2"
-        # Normalize pooling option for E5 if needed
         return HuggingFaceEmbeddings(model_name=model_name)
 
     # Initialize OpenAI embeddings (will fail if no key)

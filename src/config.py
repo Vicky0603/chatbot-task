@@ -69,7 +69,7 @@ class Settings(BaseModel):
     embeddings_model: str = os.getenv("EMBEDDINGS_MODEL", "text-embedding-3-small")
     e5_model_name: str = os.getenv("E5_MODEL_NAME", "intfloat/e5-small-v2")
     # Reranking
-    rerank_provider: str = os.getenv("RERANK_PROVIDER", "local")  # local|cohere
+    rerank_provider: str = os.getenv("RERANK_PROVIDER", "none")  # none|local|cohere
     cohere_api_key: str | None = os.getenv("COHERE_API_KEY")
     # Hallucination guard
     min_sources_required: int = int(os.getenv("MIN_SOURCES_REQUIRED", "1"))

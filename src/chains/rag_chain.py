@@ -83,10 +83,13 @@ def _hybrid_retrieve(query: str, k_vec: int, k_bm25: int, weights: tuple[float, 
 
 # Optional cross-encoder reranker (local small model or cached)
 _reranker: Any = None
-if (settings.rerank_provider or "local").lower() == "cohere" and settings.cohere_api_key:
+_provider = (settings.rerank_provider or "none").lower()
+if _provider == "cohere" and settings.cohere_api_key:
     _reranker = CohereReranker.from_env()
-else:
+elif _provider == "local":
     _reranker = CrossEncoderReranker.from_env()
+else:
+    _reranker = None
 
 # Define prompt for RAG
 prompt = ChatPromptTemplate.from_template(

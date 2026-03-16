@@ -20,4 +20,4 @@ pypdf>=4.0.0
 python-dotenv>=1.0.0
 requests>=2.31.0
 pydantic>=2.7.0
-sentence-transformers>=2.6.1
+# sentence-transformers is optional (only needed for local reranker or E5); avoid by default to keep builds slim

@@ -208,19 +208,30 @@ async def chat_invoke(payload: dict):
     messages = render_messages(history, text, info["context"])
     out = llm.invoke(messages)
     answer = getattr(out, "content", str(out))
-    # Suppress sources unless conditions are met
-    srcs = info["sources"]
+    # Apply guard using raw sources/conf, then decide what to display
+    raw_sources = info["sources"]
     conf = float(info.get("confidence") or 0.0)
+    guard_triggered = (len(raw_sources) < settings.min_sources_required) or (
+        (conf > 0.0) and (conf < settings.confidence_threshold)
+    )
+    if guard_triggered:
+        return {
+            "answer": "I don't have enough grounded context to answer confidently. Could you clarify or provide more details?",
+            "sources": [],
+            "rewritten_query": info["query"],
+            "confidence": info["confidence"],
+        }
+    # Suppress sources in the display unless conditions are met
+    srcs = raw_sources
     show_sources = (
         (info.get("qc") != "other")
-        and (len(srcs) >= settings.min_sources_required)
+        and (len(raw_sources) >= settings.min_sources_required)
         and (not answer.strip().lower().startswith("i don't know"))
         and (conf >= settings.show_sources_min_conf)
     )
     if not show_sources:
         srcs = []
     payload = {"answer": answer, "sources": srcs, "rewritten_query": info["query"], "confidence": info["confidence"]}
-    payload = rc._apply_hallucination_guard(payload)
     return payload
 
 
